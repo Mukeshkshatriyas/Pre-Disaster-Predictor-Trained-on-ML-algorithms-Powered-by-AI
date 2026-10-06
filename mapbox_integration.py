@@ -10,9 +10,9 @@ load_dotenv()
 
 class MapboxAPI:
     def __init__(self):
-        self.access_token = os.getenv('MAPBOX_ACCESS_TOKEN')
+        self.access_token = (os.getenv('MAPBOX_ACCESS_TOKEN') or '').strip()
         if not self.access_token:
-            raise ValueError("MAPBOX_ACCESS_TOKEN not found in environment variables")
+            print("MAPBOX_ACCESS_TOKEN not found; using offline fallback mode for map features.")
         self.base_url = 'https://api.mapbox.com'
         self.session = requests.Session()  # Add session for better performance
 

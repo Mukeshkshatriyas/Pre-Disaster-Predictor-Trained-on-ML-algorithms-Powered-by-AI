@@ -3,19 +3,30 @@
 <html>
 <head>
     <title>Enhanced Disaster Risk Visualization</title>
-    <script src='https://api.mapbox.com/mapbox-gl-js/v2.9.1/mapbox-gl.js'></script>
-    <link href='https://api.mapbox.com/mapbox-gl-js/v2.9.1/mapbox-gl.css' rel='stylesheet' />
+    <script src='https://unpkg.com/maplibre-gl@3.0.0/dist/maplibre-gl.js'></script>
+    <link href='https://unpkg.com/maplibre-gl@3.0.0/dist/maplibre-gl.css' rel='stylesheet' />
     <script src='https://unpkg.com/@turf/turf@6/turf.min.js'></script>
     <style>
-        body { margin: 0; font-family: Arial, sans-serif; }
+        body { margin: 0; font-family: Arial, sans-serif; background: #f3f6fb; }
         
         #map { 
-            position: absolute; 
-            top: 70px; /* Increased from 50px */
-            bottom: 0; 
-            right: 400px;
-            width: calc(100% - 400px);
-            height: calc(100vh - 70px);
+            position: fixed;
+            top: 72px;
+            left: 0;
+            right: 420px;
+            bottom: 0;
+            width: auto;
+            height: auto;
+            min-height: 420px;
+            z-index: 1;
+            background: #dfeaf7;
+            box-shadow: inset 0 0 0 2px rgba(44, 99, 160, 0.1);
+        }
+
+        #map .maplibregl-canvas-container,
+        #map .maplibregl-canvas {
+            width: 100% !important;
+            height: 100% !important;
         }
         
         /* Update controls styling for better layout */
@@ -23,15 +34,17 @@
             position: absolute; 
             top: 0; 
             left: 0; 
-            right: 400px; 
-            height: auto; /* Changed from fixed height */
+            right: 420px; 
+            height: auto; 
             padding: 10px; 
-            background: white;
-            border-bottom: 1px solid #ccc;
+            background: rgba(255,255,255,0.96);
+            border-bottom: 1px solid #d8e0ea;
             display: flex;
-            flex-wrap: wrap; /* Allow buttons to wrap */
+            flex-wrap: wrap;
             align-items: center;
             gap: 5px;
+            z-index: 5;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.06);
         }
 
         /* Group related controls */
@@ -43,16 +56,40 @@
         }
         
         #info-panel { 
-            position: absolute; 
+            position: fixed; 
             top: 0; 
             right: 0; 
-            width: 400px; 
+            width: 420px; 
             height: 100vh;
             background: white;
-            border-left: 1px solid #ccc;
+            border-left: 1px solid #d8e0ea;
             display: flex;
             flex-direction: column;
-            overflow: hidden; /* Prevent outer scrolling */
+            overflow: hidden;
+            box-shadow: -4px 0 18px rgba(0,0,0,0.08);
+            z-index: 4;
+        }
+
+        @media (max-width: 980px) {
+            #map {
+                right: 0;
+                top: 120px;
+            }
+
+            #info-panel {
+                position: relative;
+                width: 100%;
+                height: auto;
+                min-height: 300px;
+                border-left: none;
+                border-top: 1px solid #d8e0ea;
+            }
+
+            #controls {
+                right: 0;
+                flex-direction: column;
+                align-items: stretch;
+            }
         }
 
         /* Add a scrollable container for all panels */
@@ -338,43 +375,64 @@
         let tripSessionId = null;
         let shelterMarkers = []; // Add missing shelterMarkers array
 
-        // Fetch Mapbox token from server (add this new endpoint)
+        // Fetch Mapbox token from server.
+        // If no token is configured, we still render a valid OpenStreetMap-backed map.
         let MAPBOX_TOKEN = '';
-        
+
+        function getOpenStreetMapStyle() {
+            return {
+                version: 8,
+                name: 'OpenStreetMap',
+                sources: {
+                    osm: {
+                        type: 'raster',
+                        tiles: ['https://a.tile.openstreetmap.org/{z}/{x}/{y}.png'],
+                        tileSize: 256,
+                        attribution: '&copy; OpenStreetMap contributors'
+                    }
+                },
+                layers: [{
+                    id: 'osm-layer',
+                    type: 'raster',
+                    source: 'osm',
+                    paint: { 'raster-opacity': 1 }
+                }]
+            };
+        }
+
         async function fetchMapboxToken() {
             try {
                 const response = await fetch('/api/config/mapbox-token');
                 const data = await response.json();
-                MAPBOX_TOKEN = data.token;
+                MAPBOX_TOKEN = data.token || '';
                 return MAPBOX_TOKEN;
             } catch (error) {
                 console.error('Error fetching Mapbox token:', error);
-                return null;
+                return '';
             }
         }
 
-        // Initialize map
-        async function initializeMap() {
+        function buildMapStyle() {
+            return getOpenStreetMapStyle();
+        }
+
+        // Initialize map once when the page loads.
+        window.onload = async function() {
             try {
-                // Fetch token from server
                 const token = await fetchMapboxToken();
-                if (!token) {
-                    throw new Error('Could not fetch Mapbox token');
-                }
-                
-                // Set Mapbox access token
-                mapboxgl.accessToken = token;
-                
-                // Create map instance
-                map = new mapboxgl.Map({
+                MAPBOX_TOKEN = token || '';
+                const mapStyle = buildMapStyle();
+
+                map = new maplibregl.Map({
                     container: 'map',
-                    style: 'mapbox://styles/mapbox/streets-v11',
-                    center: [78.9629, 20.5937], // India center
+                    style: mapStyle,
+                    center: [78.9629, 20.5937],
                     zoom: 4
                 });
 
-                map.on('load', function() {
-                    // Add isochrone source first
+                map.addControl(new maplibregl.NavigationControl(), 'top-right');
+
+                map.on('load', () => {
                     map.addSource('isochrone', {
                         type: 'geojson',
                         data: {
@@ -387,7 +445,6 @@
                         }
                     });
 
-                    // Add isochrone layers
                     map.addLayer({
                         id: 'isochrone-area',
                         type: 'fill',
@@ -411,7 +468,6 @@
                         }
                     });
 
-                    // Add route source and layer last
                     map.addSource('route', {
                         type: 'geojson',
                         data: {
@@ -440,65 +496,6 @@
                     });
                 });
 
-                // Add navigation control
-                map.addControl(new mapboxgl.NavigationControl(), 'top-right');
-
-                return true;
-            } catch (error) {
-                console.error('Map initialization error:', error);
-                return false;
-            }
-        }
-
-        // Call initialize map when window loads
-        window.onload = async function() {
-            try {
-                const token = await fetchMapboxToken();
-                if (!token) {
-                    throw new Error('Could not fetch Mapbox token');
-                }
-                
-                mapboxgl.accessToken = token;
-                
-                map = new mapboxgl.Map({
-                    container: 'map',
-                    style: 'mapbox://styles/mapbox/streets-v11',
-                    center: [78.9629, 20.5937],
-                    zoom: 4
-                });
-
-                map.on('load', () => {
-                    // Add route source
-                    map.addSource('route', {
-                        type: 'geojson',
-                        data: {
-                            type: 'Feature',
-                            properties: {},
-                            geometry: {
-                                type: 'LineString',
-                                coordinates: []
-                            }
-                        }
-                    });
-
-                    // Add route layer
-                    map.addLayer({
-                        id: 'route',
-                        type: 'line',
-                        source: 'route',
-                        layout: {
-                            'line-join': 'round',
-                            'line-cap': 'round'
-                        },
-                        paint: {
-                            'line-color': '#3887be',
-                            'line-width': 5,
-                            'line-opacity': 0.75
-                        }
-                    });
-                });
-
-                // Setup event listeners
                 document.getElementById('chat-input').addEventListener('keypress', function(e) {
                     if (e.key === 'Enter') {
                         sendChatMessage();
@@ -543,7 +540,7 @@
                     userLocation = coords;
 
                     // Add new marker
-                    currentMarker = new mapboxgl.Marker({ color: '#FF0000' })
+                    currentMarker = new maplibregl.Marker({ color: '#FF0000' })
                         .setLngLat(coords)
                         .addTo(map);
 
@@ -593,7 +590,7 @@
                 if (currentMarker) currentMarker.remove();
 
                 // Add new marker
-                currentMarker = new mapboxgl.Marker({ color: '#FF0000' })
+                currentMarker = new maplibregl.Marker({ color: '#FF0000' })
                     .setLngLat([lon, lat])
                     .addTo(map);
 
@@ -649,7 +646,7 @@
                 shelterMarkers = [];
 
                 // Add user location marker
-                currentMarker = new mapboxgl.Marker({ color: '#FF0000' })
+                currentMarker = new maplibregl.Marker({ color: '#FF0000' })
                     .setLngLat(userLocation)
                     .addTo(map);
 
@@ -664,9 +661,9 @@
 
                 // Add shelter marker
                 const shelter = data.shelter;
-                const shelterMarker = new mapboxgl.Marker({ color: '#28a745' })
+                const shelterMarker = new maplibregl.Marker({ color: '#28a745' })
                     .setLngLat(shelter.coordinates)
-                    .setPopup(new mapboxgl.Popup({ offset: 25 })
+                    .setPopup(new maplibregl.Popup({ offset: 25 })
                         .setHTML(`
                             <div style="padding: 10px;">
                                 <h3>${shelter.name}</h3>
@@ -683,7 +680,7 @@
                 const coordinates = data.route.geometry.coordinates;
                 const bounds = coordinates.reduce((bounds, coord) => {
                     return bounds.extend(coord);
-                }, new mapboxgl.LngLatBounds(coordinates[0], coordinates[0]));
+                }, new maplibregl.LngLatBounds(coordinates[0], coordinates[0]));
                 
                 map.fitBounds(bounds, { padding: 50 });
 
@@ -738,7 +735,7 @@
                     throw new Error('No evacuation routes found');
                 }
 
-                const bounds = new mapboxgl.LngLatBounds();
+                const bounds = new maplibregl.LngLatBounds();
 
                 // Display all routes and shelters
                 data.routes.forEach((route, index) => {
@@ -778,9 +775,9 @@
                         // Add shelter marker with enhanced popup (without selection button)
                         if (route.shelter && route.shelter.coordinates) {
                             const shelter = route.shelter;
-                            const marker = new mapboxgl.Marker({ color: '#28a745' })
+                            const marker = new maplibregl.Marker({ color: '#28a745' })
                                 .setLngLat(shelter.coordinates)
-                                .setPopup(new mapboxgl.Popup({ 
+                                .setPopup(new maplibregl.Popup({ 
                                     offset: 25,
                                     closeButton: false,
                                     closeOnClick: false
@@ -1266,8 +1263,7 @@
             }
         }
 
-        // Initial call to load map
-        initializeMap();
+        // Map is initialized in window.onload.
     </script>
 </body>
 </html>

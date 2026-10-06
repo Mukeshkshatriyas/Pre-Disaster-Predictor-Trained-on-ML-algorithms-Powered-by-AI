@@ -329,11 +329,12 @@ python server.py
 
 #### 6. Run the Application
 ```bash
-python app.py
+# Windows PowerShell: starts Flask and the FloodGuard dashboard
+.\start-dashboard.ps1
 ```
 
 #### 7. Access the Web Interface
-Open your browser and navigate to:
+After the frontend is ready, open the existing app URL. It redirects to the FloodGuard dashboard:
 ```
 http://localhost:5000
 ```

@@ -1,4 +1,4 @@
-#AI_chatbot.py
+import os #AI_chatbot.py
 # Enhanced Multi-Disaster and Travel Risk Prediction System with Advanced AI Integration
 import pandas as pd
 import numpy as np
@@ -168,11 +168,13 @@ class DisasterChatbot:
     
     def __init__(self, api_key=None):
         self.api_key = api_key or os.getenv('OPENROUTER_API_KEY')
-        if not self.api_key:
-            raise ValueError("OPENROUTER_API_KEY not found in environment variables")
         self.client = None
         self.conversation_history = []
-        
+
+        if not self.api_key:
+            print("OPENROUTER_API_KEY not found; running chatbot in offline fallback mode.")
+            return
+
         if AI_AVAILABLE:
             try:
                 self.client = OpenAI(
@@ -190,7 +192,7 @@ class DisasterChatbot:
                 print("✅ Advanced Disaster Preparedness AI Chatbot initialized successfully")
             except Exception as e:
                 print(f"Could not initialize chatbot: {e}")
-                self.client = None         
+                self.client = None
         
         # Knowledge base for disaster preparedness
         self.disaster_knowledge = {
@@ -522,12 +524,14 @@ class AIGuidanceSystem:
     
     def __init__(self, api_key=None):
         self.api_key = api_key or os.getenv('OPENROUTER_API_KEY')
-        if not self.api_key:
-            raise ValueError("OPENROUTER_API_KEY not found in environment variables")
         self.client = None
         self.max_tokens = 400
         self.retry_attempts = 3
-        
+
+        if not self.api_key:
+            print("OPENROUTER_API_KEY not found; AI guidance will use offline fallback responses.")
+            return
+
         if AI_AVAILABLE:
             try:
                 self.client = OpenAI(
@@ -1521,9 +1525,9 @@ class EnhancedTravelRiskPredictor(TravelRiskPredictor):
 
 class EnhancedDataFetcher:
     def __init__(self):
-        self.weather_api_key = os.getenv('WEATHER_API_KEY')
+        self.weather_api_key = (os.getenv('WEATHER_API_KEY') or '').strip()
         if not self.weather_api_key:
-            raise ValueError("WEATHER_API_KEY not found in environment variables")
+            print("WEATHER_API_KEY not found; weather analysis will use offline fallback data.")
         self.weather_url = "http://api.weatherapi.com/v1/current.json"
         self.forecast_url = "http://api.weatherapi.com/v1/forecast.json"
         from mapbox_integration import MapboxAPI

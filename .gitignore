@@ -1,24 +1,33 @@
-# Environment variables
-.env
+# Virtual environment
+venv/
+.venv/
 
 # Python
 __pycache__/
-*.py[cod]
-*$py.class
-*.so
-.Python
-*.pkl
-*_model.pkl
-*_training_data.csv
+*.pyc
 
-# Virtual Environment
-venv/
-env/
-ENV/
+# Environment variables / API keys
+.env
+
+# Jupyter
+.ipynb_checkpoints/
 
 # IDE
 .vscode/
-.idea/
+
+# ML generated files
+*.pkl
+*.joblib
+*.h5
+*.keras
+
+# Large datasets
+dataset/
+datasets/
+data/
+
+# Logs
+*.log
 
 # OS
 .DS_Store

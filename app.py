@@ -1,11 +1,12 @@
 #app.py
-from flask import Flask, request, jsonify, send_from_directory
+from flask import Flask, request, jsonify, redirect, send_from_directory
 from server import EnhancedTravelRiskPredictor, EnhancedDataFetcher, DisasterChatbot
 from mapbox_integration import MapboxAPI
 from anomaly_detector import AnomalyDetector
 import json
 import time
 import os
+import math
 from dotenv import load_dotenv
 
 # Load environment variables
@@ -25,7 +26,8 @@ active_trips = {}
 
 @app.route('/')
 def home():
-    return send_from_directory(app.static_folder, 'visualization.html')
+    dashboard_url = os.getenv('FLOODGUARD_DASHBOARD_URL', 'http://localhost:3000/')
+    return redirect(dashboard_url)
 
 @app.route('/api/analyze')
 def analyze_city():
@@ -129,6 +131,53 @@ def analyze_location():
     except Exception as e:
         print(f"Error analyzing location: {e}")
         return jsonify({'error': str(e)}), 500
+
+@app.route('/api/predict-disaster', methods=['POST'])
+def predict_disaster():
+    payload = request.get_json(silent=True) or {}
+    disaster = str(payload.get('disaster', '')).lower()
+    inputs = payload.get('inputs')
+    allowed_disasters = {'flood', 'earthquake', 'landslide', 'cyclone', 'drought'}
+
+    if disaster not in allowed_disasters:
+        return jsonify({'error': 'Choose a supported disaster type.'}), 400
+    if not isinstance(inputs, dict):
+        return jsonify({'error': 'Prediction inputs are required.'}), 400
+    if disaster not in predictor.disaster_models:
+        return jsonify({'error': f'The {disaster} prediction model is unavailable.'}), 503
+
+    model_inputs = {}
+    for feature in predictor.numerical_features:
+        raw_value = inputs.get(feature, predictor._get_default_value(feature))
+        try:
+            value = float(raw_value)
+        except (TypeError, ValueError):
+            return jsonify({'error': f'{feature} must be a valid number.'}), 400
+        if not math.isfinite(value):
+            return jsonify({'error': f'{feature} must be a finite number.'}), 400
+        model_inputs[feature] = value
+
+    allowed_categories = {
+        'Infrastructure': {'Poor', 'Medium', 'Good'},
+        'Land_Cover': {'Urban', 'Forest', 'Agricultural', 'Water'},
+        'Soil_Type': {'Clay', 'Sand', 'Loam', 'Rock'},
+        'Season': {'Spring', 'Summer', 'Monsoon', 'Winter'},
+    }
+    for feature, options in allowed_categories.items():
+        value = str(inputs.get(feature, predictor._get_default_value(feature)))
+        if value not in options:
+            return jsonify({'error': f'{feature} has an unsupported value.'}), 400
+        model_inputs[feature] = value
+
+    predictions = predictor.predict_all_disasters(model_inputs)
+    if not predictions or disaster not in predictions:
+        return jsonify({'error': 'The prediction model could not assess these inputs.'}), 503
+
+    return jsonify({
+        'disaster': disaster,
+        'prediction': predictions[disaster],
+        'inputs': model_inputs,
+    })
 
 @app.route('/api/analyze-coords')
 def analyze_coordinates():
@@ -489,10 +538,17 @@ def batch_analyze():
 
 @app.route('/api/config/mapbox-token')
 def get_mapbox_token():
-    """Provide Mapbox token to frontend"""
-    token = os.getenv('MAPBOX_ACCESS_TOKEN')
-    if not token:
-        return jsonify({'error': 'Mapbox token not configured'}), 500
+    """Provide Mapbox token to frontend, with a safe fallback when unset."""
+    token = (os.getenv('MAPBOX_ACCESS_TOKEN') or '').strip()
+    placeholder_tokens = {
+        'demo-mapbox-token',
+        'your-mapbox-access-token-here',
+        'your_mapbox_access_token_here',
+        'pk.test',
+        'demo'
+    }
+    if token.lower() in {v.lower() for v in placeholder_tokens}:
+        token = ''
     return jsonify({'token': token})
 
 if __name__ == '__main__':
