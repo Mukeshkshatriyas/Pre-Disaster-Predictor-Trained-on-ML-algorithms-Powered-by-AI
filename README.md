@@ -806,3 +806,5 @@ This project was inspired by the need to make disaster preparedness accessible t
 **Made with ❤️ for a safer world**
 
 *Last Updated: Octomber 2025*
+#   S a f e s p h e r e  
+ 
